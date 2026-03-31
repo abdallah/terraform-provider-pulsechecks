@@ -5,6 +5,10 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
@@ -48,6 +52,7 @@ func (r *CheckResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			"check_id": schema.StringAttribute{
 				MarkdownDescription: "Check identifier",
 				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"team_id": schema.StringAttribute{
 				MarkdownDescription: "Team identifier",
@@ -65,11 +70,13 @@ func (r *CheckResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				MarkdownDescription: "Check period in seconds. Required for `heartbeat` and `http` types.",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers:       []planmodifier.Int64{int64planmodifier.UseStateForUnknown()},
 			},
 			"schedule": schema.StringAttribute{
 				MarkdownDescription: "Cron expression (e.g. `0 2 * * *`). Required for `cron` type.",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"grace_seconds": schema.Int64Attribute{
 				MarkdownDescription: "Grace period in seconds before alerting",
@@ -79,34 +86,41 @@ func (r *CheckResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				MarkdownDescription: "Check ping token",
 				Computed:            true,
 				Sensitive:           true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"status": schema.StringAttribute{
 				MarkdownDescription: "Check status",
 				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
 				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"url": schema.StringAttribute{
 				MarkdownDescription: "Target URL for http checks.",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"expected_status_code": schema.Int64Attribute{
 				MarkdownDescription: "Expected HTTP status code (default 200).",
 				Optional:            true,
 				Computed:            true,
+				Default:             int64default.StaticInt64(200),
 			},
 			"expected_string": schema.StringAttribute{
 				MarkdownDescription: "Expected string in response body.",
 				Optional:            true,
 				Computed:            true,
+				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"failure_threshold": schema.Int64Attribute{
 				MarkdownDescription: "Alert after N consecutive failures (default 1).",
 				Optional:            true,
 				Computed:            true,
+				Default:             int64default.StaticInt64(1),
 			},
 		},
 	}
@@ -163,11 +177,7 @@ func buildCheckRequest(data CheckResourceModel) CheckRequest {
 	if !data.ExpectedString.IsNull() && !data.ExpectedString.IsUnknown() {
 		req.ExpectedString = data.ExpectedString.ValueString()
 	}
-	if !data.FailureThreshold.IsNull() && !data.FailureThreshold.IsUnknown() && data.FailureThreshold.ValueInt64() != 0 {
-		req.FailureThreshold = int(data.FailureThreshold.ValueInt64())
-	} else {
-		req.FailureThreshold = 1
-	}
+	req.FailureThreshold = int(data.FailureThreshold.ValueInt64())
 	if !data.ExpectedStatusCode.IsNull() && !data.ExpectedStatusCode.IsUnknown() && data.ExpectedStatusCode.ValueInt64() != 0 {
 		req.ExpectedStatusCode = int(data.ExpectedStatusCode.ValueInt64())
 	} else {
@@ -250,6 +260,15 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	// check_id is Computed — read it from prior state, not plan
+	var state CheckResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	data.CheckId = state.CheckId
+	data.TeamId = state.TeamId
 
 	validateCheckModel(data, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
