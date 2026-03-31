@@ -79,7 +79,11 @@ func (d *CheckDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	}
 
 	state.Name = types.StringValue(check.Name)
-	state.CheckType = types.StringValue(check.CheckType)
+	checkType := check.CheckType
+	if checkType == "cron" {
+		checkType = "heartbeat"
+	}
+	state.CheckType = types.StringValue(checkType)
 	state.PeriodSeconds = types.Int64Value(check.PeriodSeconds)
 	state.GraceSeconds = types.Int64Value(check.GraceSeconds)
 	state.Token = types.StringValue(check.Token)
