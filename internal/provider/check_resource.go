@@ -95,7 +95,7 @@ func (r *CheckResource) Configure(_ context.Context, req resource.ConfigureReque
 func modelToCheck(m CheckResourceModel) Check {
 	c := Check{
 		Name:          m.Name.ValueString(),
-		CheckType:     m.CheckType.ValueString(),
+		CheckType: m.CheckType.ValueString(),
 		PeriodSeconds: m.PeriodSeconds.ValueInt64(),
 		GraceSeconds:  m.GraceSeconds.ValueInt64(),
 	}

@@ -24,15 +24,15 @@ func NewClient(baseURL, token string) *Client {
 }
 
 type Check struct {
-	CheckID              string  `json:"check_id,omitempty"`
+	CheckID              string  `json:"checkId,omitempty"`
 	Name                 string  `json:"name"`
-	CheckType            string  `json:"check_type"`
-	PeriodSeconds        int64   `json:"period_seconds"`
-	GraceSeconds         int64   `json:"grace_seconds"`
+	CheckType            string  `json:"type,omitempty"`
+	PeriodSeconds        int64   `json:"periodSeconds"`
+	GraceSeconds         int64   `json:"graceSeconds"`
 	URL                  *string `json:"url,omitempty"`
-	ExpectedStatusCode   *int64  `json:"expected_status_code,omitempty"`
-	ExpectedString       *string `json:"expected_string,omitempty"`
-	FailureThreshold     *int64  `json:"failure_threshold,omitempty"`
+	ExpectedStatusCode   *int64  `json:"expectedStatusCode,omitempty"`
+	ExpectedString       *string `json:"expectedString,omitempty"`
+	FailureThreshold     *int64  `json:"failureThreshold,omitempty"`
 	Token                string  `json:"token,omitempty"`
 }
 
