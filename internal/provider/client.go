@@ -30,9 +30,21 @@ type Check struct {
 	Schedule      string `json:"schedule,omitempty"`
 	GraceSeconds  int    `json:"graceSeconds"`
 	Token         string `json:"token"`
-	LastPingAt    string `json:"lastPingAt,omitempty"`
+	URL                string  `json:"url,omitempty"`
+	ExpectedStatusCode int     `json:"expectedStatusCode,omitempty"`
+	ExpectedString     string  `json:"expectedString,omitempty"`
+	FailureThreshold   int     `json:"failureThreshold,omitempty"`
+	LastPingAt         string  `json:"lastPingAt,omitempty"`
 	NextDueAt     string `json:"nextDueAt,omitempty"`
 	CreatedAt     string `json:"createdAt"`
+}
+
+func NewClient(baseURL, token string) *ApiClient {
+	return &ApiClient{
+		BaseURL:    baseURL,
+		Token:      token,
+		HTTPClient: &http.Client{},
+	}
 }
 
 func (c *ApiClient) doRequest(method, path string, body interface{}) (*http.Response, error) {
@@ -105,7 +117,11 @@ type CheckRequest struct {
 	Type          string `json:"type"`
 	PeriodSeconds int    `json:"periodSeconds,omitempty"`
 	Schedule      string `json:"schedule,omitempty"`
-	GraceSeconds  int    `json:"graceSeconds"`
+	GraceSeconds        int    `json:"graceSeconds"`
+	URL                string `json:"url,omitempty"`
+	ExpectedStatusCode int    `json:"expectedStatusCode,omitempty"`
+	ExpectedString     string `json:"expectedString,omitempty"`
+	FailureThreshold   int    `json:"failureThreshold,omitempty"`
 }
 
 func (c *ApiClient) CreateCheck(teamId string, req CheckRequest) (*Check, error) {

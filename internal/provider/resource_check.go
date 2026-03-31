@@ -29,7 +29,11 @@ type CheckResourceModel struct {
 	GraceSeconds  types.Int64  `tfsdk:"grace_seconds"`
 	Token         types.String `tfsdk:"token"`
 	Status        types.String `tfsdk:"status"`
-	CreatedAt     types.String `tfsdk:"created_at"`
+	URL                types.String `tfsdk:"url"`
+	ExpectedStatusCode types.Int64  `tfsdk:"expected_status_code"`
+	ExpectedString     types.String `tfsdk:"expected_string"`
+	FailureThreshold   types.Int64  `tfsdk:"failure_threshold"`
+	CreatedAt          types.String `tfsdk:"created_at"`
 }
 
 func (r *CheckResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -84,6 +88,26 @@ func (r *CheckResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				MarkdownDescription: "Creation timestamp",
 				Computed:            true,
 			},
+			"url": schema.StringAttribute{
+				MarkdownDescription: "Target URL for http checks.",
+				Optional:            true,
+				Computed:            true,
+			},
+			"expected_status_code": schema.Int64Attribute{
+				MarkdownDescription: "Expected HTTP status code (default 200).",
+				Optional:            true,
+				Computed:            true,
+			},
+			"expected_string": schema.StringAttribute{
+				MarkdownDescription: "Expected string in response body.",
+				Optional:            true,
+				Computed:            true,
+			},
+			"failure_threshold": schema.Int64Attribute{
+				MarkdownDescription: "Alert after N consecutive failures (default 1).",
+				Optional:            true,
+				Computed:            true,
+			},
 		},
 	}
 }
@@ -133,6 +157,22 @@ func buildCheckRequest(data CheckResourceModel) CheckRequest {
 	if !data.Schedule.IsNull() && !data.Schedule.IsUnknown() {
 		req.Schedule = data.Schedule.ValueString()
 	}
+	if !data.URL.IsNull() && !data.URL.IsUnknown() {
+		req.URL = data.URL.ValueString()
+	}
+	if !data.ExpectedString.IsNull() && !data.ExpectedString.IsUnknown() {
+		req.ExpectedString = data.ExpectedString.ValueString()
+	}
+	if !data.FailureThreshold.IsNull() && !data.FailureThreshold.IsUnknown() && data.FailureThreshold.ValueInt64() != 0 {
+		req.FailureThreshold = int(data.FailureThreshold.ValueInt64())
+	} else {
+		req.FailureThreshold = 1
+	}
+	if !data.ExpectedStatusCode.IsNull() && !data.ExpectedStatusCode.IsUnknown() && data.ExpectedStatusCode.ValueInt64() != 0 {
+		req.ExpectedStatusCode = int(data.ExpectedStatusCode.ValueInt64())
+	} else {
+		req.ExpectedStatusCode = 200
+	}
 	return req
 }
 
@@ -144,11 +184,19 @@ func applyCheckToModel(check *Check, data *CheckResourceModel) {
 	data.Token = types.StringValue(check.Token)
 	data.Status = types.StringValue(check.Status)
 	data.CreatedAt = types.StringValue(check.CreatedAt)
-	if check.PeriodSeconds != 0 {
-		data.PeriodSeconds = types.Int64Value(int64(check.PeriodSeconds))
+	data.PeriodSeconds = types.Int64Value(int64(check.PeriodSeconds))
+	data.Schedule = types.StringValue(check.Schedule)
+	data.URL = types.StringValue(check.URL)
+	if check.ExpectedStatusCode != 0 {
+		data.ExpectedStatusCode = types.Int64Value(int64(check.ExpectedStatusCode))
+	} else {
+		data.ExpectedStatusCode = types.Int64Value(200)
 	}
-	if check.Schedule != "" {
-		data.Schedule = types.StringValue(check.Schedule)
+	data.ExpectedString = types.StringValue(check.ExpectedString)
+	if check.FailureThreshold != 0 {
+		data.FailureThreshold = types.Int64Value(int64(check.FailureThreshold))
+	} else {
+		data.FailureThreshold = types.Int64Value(1)
 	}
 }
 

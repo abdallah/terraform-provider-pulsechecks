@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -11,25 +12,23 @@ import (
 var _ datasource.DataSource = &CheckDataSource{}
 
 type CheckDataSource struct {
-	client *Client
+	client *ApiClient
+}
+
+type CheckDataSourceModel struct {
+	TeamID        types.String `tfsdk:"team_id"`
+	CheckID       types.String `tfsdk:"check_id"`
+	Name          types.String `tfsdk:"name"`
+	CheckType     types.String `tfsdk:"check_type"`
+	PeriodSeconds types.Int64  `tfsdk:"period_seconds"`
+	Schedule      types.String `tfsdk:"schedule"`
+	GraceSeconds  types.Int64  `tfsdk:"grace_seconds"`
+	Token         types.String `tfsdk:"token"`
+	Status        types.String `tfsdk:"status"`
 }
 
 func NewCheckDataSource() datasource.DataSource {
 	return &CheckDataSource{}
-}
-
-type CheckDataSourceModel struct {
-	TeamID             types.String `tfsdk:"team_id"`
-	CheckID            types.String `tfsdk:"check_id"`
-	Name               types.String `tfsdk:"name"`
-	CheckType          types.String `tfsdk:"check_type"`
-	PeriodSeconds      types.Int64  `tfsdk:"period_seconds"`
-	GraceSeconds       types.Int64  `tfsdk:"grace_seconds"`
-	URL                types.String `tfsdk:"url"`
-	ExpectedStatusCode types.Int64  `tfsdk:"expected_status_code"`
-	ExpectedString     types.String `tfsdk:"expected_string"`
-	FailureThreshold   types.Int64  `tfsdk:"failure_threshold"`
-	Token              types.String `tfsdk:"token"`
 }
 
 func (d *CheckDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -38,18 +37,17 @@ func (d *CheckDataSource) Metadata(_ context.Context, req datasource.MetadataReq
 
 func (d *CheckDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Fetches a PulseChecks check by ID.",
 		Attributes: map[string]schema.Attribute{
-			"team_id":              schema.StringAttribute{Required: true},
-			"check_id":             schema.StringAttribute{Required: true},
-			"name":                 schema.StringAttribute{Computed: true},
-			"check_type":           schema.StringAttribute{Computed: true},
-			"period_seconds":       schema.Int64Attribute{Computed: true},
-			"grace_seconds":        schema.Int64Attribute{Computed: true},
-			"url":                  schema.StringAttribute{Computed: true},
-			"expected_status_code": schema.Int64Attribute{Computed: true},
-			"expected_string":      schema.StringAttribute{Computed: true},
-			"failure_threshold":    schema.Int64Attribute{Computed: true},
-			"token":                schema.StringAttribute{Computed: true, Sensitive: true},
+			"team_id":        schema.StringAttribute{Required: true},
+			"check_id":       schema.StringAttribute{Required: true},
+			"name":           schema.StringAttribute{Computed: true},
+			"check_type":     schema.StringAttribute{Computed: true},
+			"period_seconds": schema.Int64Attribute{Computed: true},
+			"schedule":       schema.StringAttribute{Computed: true},
+			"grace_seconds":  schema.Int64Attribute{Computed: true},
+			"token":          schema.StringAttribute{Computed: true, Sensitive: true},
+			"status":         schema.StringAttribute{Computed: true},
 		},
 	}
 }
@@ -58,7 +56,13 @@ func (d *CheckDataSource) Configure(_ context.Context, req datasource.ConfigureR
 	if req.ProviderData == nil {
 		return
 	}
-	d.client = req.ProviderData.(*Client)
+	client, ok := req.ProviderData.(*ApiClient)
+	if !ok {
+		resp.Diagnostics.AddError("Unexpected provider data type",
+			fmt.Sprintf("Expected *ApiClient, got: %T", req.ProviderData))
+		return
+	}
+	d.client = client
 }
 
 func (d *CheckDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -68,7 +72,7 @@ func (d *CheckDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 		return
 	}
 
-	check, err := d.client.GetCheck(ctx, state.TeamID.ValueString(), state.CheckID.ValueString())
+	check, err := d.client.GetCheck(state.TeamID.ValueString(), state.CheckID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Read failed", err.Error())
 		return
@@ -79,35 +83,12 @@ func (d *CheckDataSource) Read(ctx context.Context, req datasource.ReadRequest, 
 	}
 
 	state.Name = types.StringValue(check.Name)
-	checkType := check.CheckType
-	if checkType == "cron" {
-		checkType = "heartbeat"
-	}
-	state.CheckType = types.StringValue(checkType)
-	state.PeriodSeconds = types.Int64Value(check.PeriodSeconds)
-	state.GraceSeconds = types.Int64Value(check.GraceSeconds)
+	state.CheckType = types.StringValue(check.CheckType)
+	state.PeriodSeconds = types.Int64Value(int64(check.PeriodSeconds))
+	state.Schedule = types.StringValue(check.Schedule)
+	state.GraceSeconds = types.Int64Value(int64(check.GraceSeconds))
 	state.Token = types.StringValue(check.Token)
-
-	if check.URL != nil {
-		state.URL = types.StringValue(*check.URL)
-	} else {
-		state.URL = types.StringNull()
-	}
-	if check.ExpectedStatusCode != nil {
-		state.ExpectedStatusCode = types.Int64Value(*check.ExpectedStatusCode)
-	} else {
-		state.ExpectedStatusCode = types.Int64Null()
-	}
-	if check.ExpectedString != nil {
-		state.ExpectedString = types.StringValue(*check.ExpectedString)
-	} else {
-		state.ExpectedString = types.StringNull()
-	}
-	if check.FailureThreshold != nil {
-		state.FailureThreshold = types.Int64Value(*check.FailureThreshold)
-	} else {
-		state.FailureThreshold = types.Int64Null()
-	}
+	state.Status = types.StringValue(check.Status)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
