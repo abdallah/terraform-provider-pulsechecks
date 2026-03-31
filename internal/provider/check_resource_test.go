@@ -114,20 +114,20 @@ func TestAccCheckResource_HTTP(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create HTTP check
 			{
-				Config: httpConfig(teamID(), "acc-http", "https://wpml.org", 60, 30, 200, 2),
+				Config: httpConfig(teamID(), "acc-http", "https://wpml.org", 3600, 30, 200, 2),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("pulsechecks_check.test", "name", "acc-http"),
 					resource.TestCheckResourceAttr("pulsechecks_check.test", "check_type", "http"),
 					resource.TestCheckResourceAttr("pulsechecks_check.test", "url", "https://wpml.org"),
 					resource.TestCheckResourceAttr("pulsechecks_check.test", "expected_status_code", "200"),
 					resource.TestCheckResourceAttr("pulsechecks_check.test", "failure_threshold", "2"),
-					resource.TestCheckResourceAttr("pulsechecks_check.test", "period_seconds", "60"),
+					resource.TestCheckResourceAttr("pulsechecks_check.test", "period_seconds", "3600"),
 					resource.TestCheckResourceAttrSet("pulsechecks_check.test", "check_id"),
 				),
 			},
 			// Update failure threshold
 			{
-				Config: httpConfig(teamID(), "acc-http", "https://wpml.org", 60, 30, 200, 3),
+				Config: httpConfig(teamID(), "acc-http", "https://wpml.org", 3600, 30, 200, 3),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("pulsechecks_check.test", "failure_threshold", "3"),
 				),
