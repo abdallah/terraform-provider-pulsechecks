@@ -2,115 +2,182 @@ package provider
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 )
 
-type Client struct {
+type ApiClient struct {
 	BaseURL    string
 	Token      string
 	HTTPClient *http.Client
 }
 
-func NewClient(baseURL, token string) *Client {
-	return &Client{
-		BaseURL:    baseURL,
-		Token:      token,
-		HTTPClient: &http.Client{},
-	}
+type Team struct {
+	TeamId    string `json:"teamId"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"createdAt"`
 }
 
 type Check struct {
-	CheckID              string  `json:"checkId,omitempty"`
-	Name                 string  `json:"name"`
-	CheckType            string  `json:"type,omitempty"`
-	PeriodSeconds        int64   `json:"periodSeconds"`
-	GraceSeconds         int64   `json:"graceSeconds"`
-	URL                  *string `json:"url,omitempty"`
-	ExpectedStatusCode   *int64  `json:"expectedStatusCode,omitempty"`
-	ExpectedString       *string `json:"expectedString,omitempty"`
-	FailureThreshold     *int64  `json:"failureThreshold,omitempty"`
-	Token                string  `json:"token,omitempty"`
+	CheckId       string `json:"checkId"`
+	TeamId        string `json:"teamId"`
+	Name          string `json:"name"`
+	CheckType     string `json:"type"`
+	Status        string `json:"status"`
+	PeriodSeconds int    `json:"periodSeconds,omitempty"`
+	Schedule      string `json:"schedule,omitempty"`
+	GraceSeconds  int    `json:"graceSeconds"`
+	Token         string `json:"token"`
+	LastPingAt    string `json:"lastPingAt,omitempty"`
+	NextDueAt     string `json:"nextDueAt,omitempty"`
+	CreatedAt     string `json:"createdAt"`
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte, int, error) {
-	var bodyReader io.Reader
+func (c *ApiClient) doRequest(method, path string, body interface{}) (*http.Response, error) {
+	var reqBody io.Reader
 	if body != nil {
-		b, err := json.Marshal(body)
+		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
-		bodyReader = bytes.NewReader(b)
+		reqBody = bytes.NewBuffer(jsonBody)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, bodyReader)
+
+	req, err := http.NewRequest(method, c.BaseURL+path, reqBody)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	resp, err := c.HTTPClient.Do(req)
+
+	return c.HTTPClient.Do(req)
+}
+
+func (c *ApiClient) CreateTeam(name string) (*Team, error) {
+	body := map[string]string{"name": name}
+	resp, err := c.doRequest("POST", "/teams", body)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	return data, resp.StatusCode, err
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
+	}
+
+	var team Team
+	if err := json.NewDecoder(resp.Body).Decode(&team); err != nil {
+		return nil, err
+	}
+
+	return &team, nil
 }
 
-func (c *Client) CreateCheck(ctx context.Context, teamID string, check Check) (*Check, error) {
-	data, status, err := c.do(ctx, http.MethodPost, fmt.Sprintf("/teams/%s/checks", teamID), check)
+func (c *ApiClient) GetTeam(teamId string) (*Team, error) {
+	resp, err := c.doRequest("GET", "/teams/"+teamId, nil)
 	if err != nil {
 		return nil, err
 	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("API error %d: %s", status, string(data))
-	}
-	var result Check
-	return &result, json.Unmarshal(data, &result)
-}
+	defer resp.Body.Close()
 
-func (c *Client) GetCheck(ctx context.Context, teamID, checkID string) (*Check, error) {
-	data, status, err := c.do(ctx, http.MethodGet, fmt.Sprintf("/teams/%s/checks/%s", teamID, checkID), nil)
-	if err != nil {
-		return nil, err
-	}
-	if status == http.StatusNotFound {
+	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
 	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("API error %d: %s", status, string(data))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
 	}
-	var result Check
-	return &result, json.Unmarshal(data, &result)
+
+	var team Team
+	if err := json.NewDecoder(resp.Body).Decode(&team); err != nil {
+		return nil, err
+	}
+
+	return &team, nil
 }
 
-func (c *Client) UpdateCheck(ctx context.Context, teamID, checkID string, check Check) (*Check, error) {
-	data, status, err := c.do(ctx, http.MethodPatch, fmt.Sprintf("/teams/%s/checks/%s", teamID, checkID), check)
+type CheckRequest struct {
+	Name          string `json:"name"`
+	Type          string `json:"type"`
+	PeriodSeconds int    `json:"periodSeconds,omitempty"`
+	Schedule      string `json:"schedule,omitempty"`
+	GraceSeconds  int    `json:"graceSeconds"`
+}
+
+func (c *ApiClient) CreateCheck(teamId string, req CheckRequest) (*Check, error) {
+	resp, err := c.doRequest("POST", "/teams/"+teamId+"/checks", req)
 	if err != nil {
 		return nil, err
 	}
-	if status < 200 || status >= 300 {
-		return nil, fmt.Errorf("API error %d: %s", status, string(data))
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
 	}
-	var result Check
-	return &result, json.Unmarshal(data, &result)
+
+	var check Check
+	if err := json.NewDecoder(resp.Body).Decode(&check); err != nil {
+		return nil, err
+	}
+
+	return &check, nil
 }
 
-func (c *Client) DeleteCheck(ctx context.Context, teamID, checkID string) error {
-	data, status, err := c.do(ctx, http.MethodDelete, fmt.Sprintf("/teams/%s/checks/%s", teamID, checkID), nil)
+func (c *ApiClient) GetCheck(teamId, checkId string) (*Check, error) {
+	resp, err := c.doRequest("GET", "/teams/"+teamId+"/checks/"+checkId, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
+	}
+
+	var check Check
+	if err := json.NewDecoder(resp.Body).Decode(&check); err != nil {
+		return nil, err
+	}
+
+	return &check, nil
+}
+
+func (c *ApiClient) UpdateCheck(teamId, checkId string, req CheckRequest) (*Check, error) {
+	resp, err := c.doRequest("PATCH", "/teams/"+teamId+"/checks/"+checkId, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
+	}
+
+	var check Check
+	if err := json.NewDecoder(resp.Body).Decode(&check); err != nil {
+		return nil, err
+	}
+
+	return &check, nil
+}
+
+func (c *ApiClient) DeleteCheck(teamId, checkId string) error {
+	resp, err := c.doRequest("DELETE", "/teams/"+teamId+"/checks/"+checkId, nil)
 	if err != nil {
 		return err
 	}
-	if status == http.StatusNotFound {
-		return nil
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error: %d", resp.StatusCode)
 	}
-	if status < 200 || status >= 300 {
-		return fmt.Errorf("API error %d: %s", status, string(data))
-	}
+
 	return nil
 }
